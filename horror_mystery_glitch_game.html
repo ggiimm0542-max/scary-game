@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROJECT NULL - 3D Hybrid</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+  
+  /* 2D Text Game UI */
+  #game-2d {
+    background: #0a0a0f;
+    color: #c8c8d4;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%; max-width: 800px;
+    height: 80vh; max-height: 600px;
+    padding: 20px;
+    border: 1px solid #1a1a2e;
+    border-radius: 8px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+  }
+  #scanline {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+    pointer-events: none; z-index: 1;
+  }
+  #content { position: relative; z-index: 2; flex-grow: 1; display: flex; flex-direction: column; }
+  #topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid #1e1e3a; padding-bottom: 10px; margin-bottom: 18px;
+    font-size: 11px; color: #555570;
+  }
+  #title-bar { color: #8888bb; font-size: 13px; letter-spacing: 4px; text-transform: uppercase; }
+  #stats { display: flex; gap: 20px; font-size: 12px; }
+  .stat-label { color: #444455; }
+  .stat-val { color: #9999cc; }
+  #scene-title { font-size: 15px; color: #aaaadd; margin-bottom: 14px; letter-spacing: 2px; }
+  #narrative {
+    font-size: 13px; line-height: 1.9; color: #b0b0c8;
+    min-height: 100px; margin-bottom: 20px;
+    border-left: 2px solid #1a1a3a; padding-left: 14px;
+    flex-grow: 1;
+  }
+  #choices { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+  .choice-btn {
+    background: transparent; border: 1px solid #2a2a4a;
+    color: #9999cc; padding: 10px 16px; text-align: left;
+    font-family: 'Courier New', monospace; font-size: 12px;
+    cursor: pointer; border-radius: 4px; transition: all 0.15s;
+    letter-spacing: 0.5px;
+  }
+  .choice-btn:hover { background: #0f0f2a; border-color: #5555aa; color: #ccccff; }
+  #atmosphere { font-size: 11px; color: #3a3a5a; font-style: italic; }
+  #progress-bar {
+    height: 2px; background: #0f0f1f; margin-bottom: 16px;
+    border-radius: 2px; overflow: hidden;
+  }
+  #progress-fill { height: 100%; background: #4444aa; transition: width 0.5s; }
+  
+  #cursor-blink {
+    display: inline-block; width: 8px; height: 14px;
+    background: #9999cc; vertical-align: middle;
+    animation: blink 0.7s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* 3D Game UI */
+  #game-3d-container {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 20; display: none; background: #000;
+  }
+  #game-3d-canvas {
+    width: 100% !important; height: 100% !important;
+    image-rendering: pixelated; /* PS1 Retro Style */
+  }
+  #crosshair {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 24px; pointer-events: none; z-index: 21;
+  }
+  #objective-ui {
+    position: absolute; top: 20px; left: 20px;
+    color: #ffaaaa; font-size: 16px; text-shadow: 1px 1px 0 #000;
+    z-index: 21; pointer-events: none;
+    border-left: 3px solid #ff4444; padding-left: 10px;
+    background: rgba(0,0,0,0.5); padding: 10px;
+  }
+  #blocker {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); z-index: 22;
+    display: flex; justify-content: center; align-items: center;
+    color: #fff; flex-direction: column; text-align: center;
+    cursor: pointer;
+  }
+  .instructions { font-size: 14px; line-height: 2; color: #aaa; margin-top: 20px;}
+  .click-to-start { font-size: 20px; color: #fff; animation: blink 1.5s infinite; }
+
+  /* Glitch overlay */
+  #glitch-overlay {
+    display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 100; background: #0a0a0f; overflow: hidden;
+  }
+  #glitch-overlay.active { display: block; }
+  .glitch-line {
+    position: absolute; left: 0; right: 0; height: 3px;
+    background: #5555ff; opacity: 0.6;
+    animation: glitch-move 0.1s infinite;
+  }
+  .glitch-block {
+    position: absolute; background: rgba(80,80,200,0.15);
+    animation: flicker 0.05s infinite;
+  }
+  #error-text {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    text-align: center; z-index: 101;
+  }
+  #error-code {
+    font-family: 'Courier New', monospace; font-size: 11px;
+    color: #6666ff; line-height: 1.6; white-space: pre;
+    text-align: left; display: inline-block;
+  }
+  
+  @keyframes glitch-move { 0%{top:10%} 25%{top:45%} 50%{top:72%} 75%{top:30%} 100%{top:60%} }
+  @keyframes flicker { 0%,100%{opacity:0.15} 50%{opacity:0.35} }
+</style>
+</head>
+<body>
+
+<!-- 2D TEXT INTERFACE -->
+<div id="game-2d">
+  <div id="scanline"></div>
+  <div id="glitch-overlay">
+    <div class="glitch-line" style="top:20%"></div>
+    <div class="glitch-line" style="top:55%; background:#ff4444; animation-delay:0.03s"></div>
+    <div class="glitch-line" style="top:80%; animation-delay:0.07s"></div>
+    <div class="glitch-block" style="top:15%; left:10%; width:180px; height:40px;"></div>
+    <div id="error-text"><div id="error-code"></div></div>
+  </div>
+  <div id="content">
+    <div id="topbar">
+      <div id="title-bar">▓ PROJECT NULL ▓</div>
+      <div id="stats">
+        <span><span class="stat-label">SANITY </span><span class="stat-val" id="sanity-val">100</span></span>
+        <span><span class="stat-label">DEPTH </span><span class="stat-val" id="depth-val">1</span></span>
+      </div>
+    </div>
+    <div id="progress-bar"><div id="progress-fill" style="width:5%"></div></div>
+    <div id="scene-title"></div>
+    <div id="narrative"><span id="cursor-blink"></span></div>
+    <div id="choices"></div>
+    <div id="atmosphere"></div>
+  </div>
+</div>
+
+<!-- 3D EXPLORATION INTERFACE -->
+<div id="game-3d-container">
+  <div id="crosshair">+</div>
+  <div id="objective-ui"></div>
+  <div id="blocker">
+    <div class="click-to-start">[ 화면을 클릭하여 진입 ]</div>
+    <div class="instructions">이동: W A S D<br>시점: 마우스<br>손전등: F</div>
+  </div>
+</div>
+
+<script>
+// ==========================================
+// SCENE DATA
+// ==========================================
+const scenes = [
+  {
+    id: 0,
+    title: ":: 00 — 검은 숲",
+    text: "도심에서 벗어난 외곽의 깊은 숲속.\n밤 11시. 달빛조차 나무에 가려 거의 보이지 않는다.\n동료 박지수에게서 마지막으로 연락이 온 폐연구소가 이 근처에 있을 것이다.",
+    atm: "// 바스락거리는 소리 — 바람인가, 아니면 다른 무언가인가",
+    choices: [
+      { text: "> 숲을 수색하여 건물을 찾는다", next: 'forest_3d' }
+    ]
+  },
+  {
+    id: 'forest_3d',
+    title: ":: 00 — 숲 수색",
+    mode: '3d',
+    level: {
+      objective: "목표: 어둠 속에서 폐연구소를 찾아라",
+      next: 'building_front',
+      grid: [
+        [3,3,3,3,3,3,3,3,3,3],
+        [3,0,0,0,0,0,0,0,0,3],
+        [3,0,3,0,0,3,0,3,0,3],
+        [3,0,0,0,0,0,0,0,0,3],
+        [3,0,3,0,0,0,0,3,0,3],
+        [3,0,0,0,0,0,0,0,0,3],
+        [3,0,3,0,4,2,4,0,0,3],
+        [3,0,0,0,4,0,4,0,3,3],
+        [3,3,0,0,4,4,4,0,0,3],
+        [3,0,0,0,0,0,0,0,0,3],
+        [3,3,3,3,3,3,3,3,3,3]
+      ],
+      playerStart: { x: 4, y: 1 }
+    }
+  },
+  {
+    id: 'building_front',
+    title: ":: 01 — 건물 입구",
+    text: "거대한 콘크리트 건물이 나무들 사이로 모습을 드러냈다.\n지도에는 존재하지 않는 구역.\n건물 외벽에 무언가 긁힌 자국이 있다.\n\n『 돌아가. 이미 늦었어. 』\n\n필체가 낯익다. 박지수의 글씨체다.",
+    atm: "// 발소리가 없다 — 이질적인 고요함",
+    choices: [
+      { text: "> 정문으로 들어간다", next: 1 },
+      { text: "> 주변을 조금 더 살핀다", next: 1, sanity: -5 }
+    ]
+  },
+  {
+    id: 1, // 1층 로비 3D 씬
+    title: ":: 02 — 1층 로비",
+    mode: '3d',
+    level: {
+      objective: "목표: 안쪽 복도로 통하는 문을 찾아라",
+      next: 2,
+      grid: [
+        [1,1,1,1,1,1,1,1,1],
+        [1,0,0,0,0,0,0,0,1],
+        [1,0,1,1,0,1,1,0,1],
+        [1,0,1,0,0,0,1,0,1],
+        [1,0,1,0,1,0,1,0,1],
+        [1,0,0,0,1,0,0,0,1],
+        [1,1,1,1,1,1,2,1,1], // 2는 다음 씬 트리거
+        [1,1,1,1,1,1,1,1,1]
+      ],
+      playerStart: { x: 1, y: 1 }
+    }
+  },
+  {
+    id: 2,
+    title: ":: 03 — 실험실 복도",
+    text: "복도 끝 문을 열고 들어왔다.\n형광등이 끊기듯 깜빡인다.\n왼쪽 방들은 모두 빈 것 같다. 오른쪽 끝 방에만\n문 아래로 빛이 새어나온다.\n\n문에 테이프로 종이가 붙어 있다.\n\n『 B-7 실험체 격리 구역 — 절대 개방 금지 』",
+    atm: "// 냄새가 난다 — 포름알데히드와 무언가",
+    choices: [
+      { text: "> 빛이 새는 방 문을 연다", next: 4, sanity: -10 },
+      { text: "> 계단으로 3층에 오른다", next: 3 }
+    ]
+  },
+  {
+    id: 3, // 3층 사무실 3D 씬
+    title: ":: 04 — 3층 사무실",
+    mode: '3d',
+    level: {
+      objective: "목표: 규칙적인 타이핑 소리가 나는 곳을 확인해라",
+      next: '3_text',
+      grid: [
+        [1,1,1,1,1,1,1,1],
+        [1,0,0,0,1,0,0,1],
+        [1,0,1,0,1,0,2,1], // 2는 켜진 컴퓨터
+        [1,0,1,0,0,0,0,1],
+        [1,0,0,0,1,1,1,1],
+        [1,1,1,1,1,1,1,1]
+      ],
+      playerStart: { x: 1, y: 3 }
+    }
+  },
+  {
+    id: '3_text',
+    title: ":: 04 — 3층 사무실",
+    text: "타이핑 소리의 출처를 찾았다.\n\n오래된 컴퓨터가 켜져 있다. 혼자 움직이고 있다.\n화면에는 같은 문장이 반복되고 있다.\n\n『 나는 여기 있어. 나는 여기 있어. 나는 여기 있어. 』\n\n커서 옆에 날짜 — 오늘로부터 3년 전.",
+    atm: "// 접속자 기록 : PARK_JISOO — LAST ACTIVE : 2021-03-12 03:47",
+    choices: [
+      { text: "> 키보드를 건드린다", next: 5, sanity: -15 },
+      { text: "> 지하로 내려간다", next: 5 }
+    ]
+  },
+  {
+    id: 4,
+    title: ":: 05 — 격리 구역",
+    text: "방 안에는 유리 격벽이 있다.\n격벽 안은 비어 있다 — 아니, 비어 보인다.\n\n가까이 다가가자 유리에 손자국이 보인다.\n안쪽에서 찍힌 손자국.\n\n그것이 움직인다.",
+    atm: "// 체온 감지 : ——",
+    choices: [
+      { text: "> 뒷걸음질 친다", next: 5, sanity: -20 },
+      { text: "> 말을 건다", next: 5, sanity: -30 }
+    ]
+  },
+  {
+    id: 5,
+    title: ":: 06 — 심연",
+    text: "무언가가 뒤에서 걷는 소리가 들린다.\n돌아보면 아무것도 없다. 또 들린다.\n또 아무것도 없다.\n\n지하로 내려가는 계단을 발견했다.\n빛이 전혀 없다. 핸드폰 배터리 11%.",
+    atm: "// 소리 패턴 분석 중... 인간의 보폭과 일치 — 그러나 무게가 없다",
+    choices: [
+      { text: "> 지하로 내려간다", next: 'GLITCH' }
+    ]
+  }
+];
+
+let state = { scene: 0, sanity: 100, depth: 1 };
+let typeTimer = null;
+
+// ==========================================
+// 2D GAME LOGIC
+// ==========================================
+function getScene(id) { return scenes.find(s => s.id === id); }
+
+function updateStats() {
+  document.getElementById('sanity-val').textContent = state.sanity;
+  document.getElementById('depth-val').textContent = state.depth;
+  const progress = Math.min(95, state.depth * 14);
+  document.getElementById('progress-fill').style.width = progress + '%';
+  if (state.sanity < 40) document.getElementById('sanity-val').style.color = '#ff6666';
+  else if (state.sanity < 70) document.getElementById('sanity-val').style.color = '#ffaa44';
+}
+
+function typeText(el, text, cb) {
+  if (typeTimer) clearInterval(typeTimer);
+  el.textContent = '';
+  let i = 0;
+  const lines = text.split('\n');
+  let fullText = '';
+  typeTimer = setInterval(() => {
+    if (i < text.length) {
+      fullText += text[i];
+      el.innerHTML = fullText.replace(/\n/g,'<br>') + '<span id="cursor-blink"></span>';
+      i++;
+    } else {
+      el.innerHTML = fullText.replace(/\n/g,'<br>');
+      clearInterval(typeTimer);
+      if (cb) cb();
+    }
+  }, 55); // Slowed down text speed
+}
+
+function showScene(id) {
+  if (id === 'GLITCH') { triggerGlitch(); return; }
+  const scene = getScene(id);
+  if (!scene) return;
+  
+  if (scene.mode === '3d') {
+    start3DScene(scene.level);
+    return;
+  }
+  
+  // Show 2D Interface
+  document.getElementById('game-2d').style.display = 'flex';
+  document.getElementById('game-3d-container').style.display = 'none';
+  
+  state.scene = id;
+  document.getElementById('scene-title').textContent = scene.title;
+  document.getElementById('choices').innerHTML = '';
+  document.getElementById('atmosphere').textContent = '';
+  const narr = document.getElementById('narrative');
+  typeText(narr, scene.text, () => {
+    document.getElementById('atmosphere').textContent = scene.atm;
+    renderChoices(scene.choices);
+  });
+  updateStats();
+}
+
+function renderChoices(choices) {
+  const cont = document.getElementById('choices');
+  cont.innerHTML = '';
+  choices.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = c.text;
+    btn.onclick = () => {
+      if (c.sanity) state.sanity = Math.max(0, state.sanity + c.sanity);
+      state.depth++;
+      showScene(c.next);
+    };
+    cont.appendChild(btn);
+  });
+}
+
+function triggerGlitch() {
+  const overlay = document.getElementById('glitch-overlay');
+  const errorCode = document.getElementById('error-code');
+  overlay.classList.add('active');
+  document.getElementById('game-2d').style.transform = 'translate(-50%, -50%) scale(1.02)';
+  
+  let msg = "FATAL ERROR\n> Entity Overflow in memory address 0xDEAD\n> Connection Lost...";
+  errorCode.textContent = msg;
+  
+  setTimeout(() => {
+    document.body.innerHTML = '<div style="color:red; font-family:monospace; margin:50px;">끝. 탈출 실패.</div>';
+  }, 2000);
+}
+
+// ==========================================
+// 3D GAME LOGIC (THREE.JS)
+// ==========================================
+let camera, scene3d, renderer, controls;
+let flashlight;
+let flashlightOn = true;
+let walls = [], triggers = [];
+let is3DActive = false;
+let currentLevelData = null;
+
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+let prevTime = performance.now();
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+const UNIT_SIZE = 4;
+const PLAYER_HEIGHT = 2;
+
+function generateNoiseTexture(color1, color2, w=64, h=64) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(w, h);
+  const data = imgData.data;
+  const c1 = new THREE.Color(color1);
+  const c2 = new THREE.Color(color2);
+  for(let i=0; i<data.length; i+=4) {
+    const t = Math.random();
+    data[i] = (c1.r + (c2.r - c1.r)*t) * 255;
+    data[i+1] = (c1.g + (c2.g - c1.g)*t) * 255;
+    data[i+2] = (c1.b + (c2.b - c1.b)*t) * 255;
+    data[i+3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  return tex;
+}
+
+function init3D() {
+  const container = document.getElementById('game-3d-container');
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+  
+  scene3d = new THREE.Scene();
+  scene3d.background = new THREE.Color(0x050508);
+  scene3d.fog = new THREE.Fog(0x050508, 1, 35); // Increased render distance so the building is visible
+
+  // Lights
+  const light = new THREE.HemisphereLight(0x333344, 0x000000, 0.8);
+  scene3d.add(light);
+  
+  flashlight = new THREE.SpotLight(0xffeedd, 1.5, 45, Math.PI / 5, 0.5, 1);
+  flashlight.position.set(0, 0, 0);
+  flashlight.target.position.set(0, 0, -1);
+  camera.add(flashlight);
+  camera.add(flashlight.target);
+  scene3d.add(camera);
+
+  // Renderer setup for PS1 Pixelation
+  renderer = new THREE.WebGLRenderer({ antialias: false });
+  renderer.setPixelRatio(0.3); // Very low resolution for chunky pixels
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.domElement.id = 'game-3d-canvas';
+  container.insertBefore(renderer.domElement, container.firstChild);
+
+  controls = new THREE.PointerLockControls(camera, document.body);
+  const blocker = document.getElementById('blocker');
+
+  blocker.addEventListener('click', function () {
+    if(is3DActive) controls.lock();
+  });
+
+  controls.addEventListener('lock', function () {
+    blocker.style.display = 'none';
+  });
+
+  controls.addEventListener('unlock', function () {
+    if (is3DActive) blocker.style.display = 'flex';
+  });
+
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+  window.addEventListener('resize', onWindowResize);
+  
+  requestAnimationFrame(animate3D);
+}
+
+function onKeyDown(event) {
+  switch (event.code) {
+    case 'ArrowUp': case 'KeyW': moveForward = true; break;
+    case 'ArrowLeft': case 'KeyA': moveLeft = true; break;
+    case 'ArrowDown': case 'KeyS': moveBackward = true; break;
+    case 'ArrowRight': case 'KeyD': moveRight = true; break;
+    case 'KeyF':
+      flashlightOn = !flashlightOn;
+      if (flashlight) flashlight.visible = flashlightOn;
+      break;
+  }
+}
+function onKeyUp(event) {
+  switch (event.code) {
+    case 'ArrowUp': case 'KeyW': moveForward = false; break;
+    case 'ArrowLeft': case 'KeyA': moveLeft = false; break;
+    case 'ArrowDown': case 'KeyS': moveBackward = false; break;
+    case 'ArrowRight': case 'KeyD': moveRight = false; break;
+  }
+}
+
+function onWindowResize() {
+  if(!camera) return;
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function buildLevel(level) {
+  // Clear old level
+  walls.forEach(w => scene3d.remove(w));
+  triggers.forEach(t => scene3d.remove(t));
+  walls = []; triggers = [];
+  
+  const grid = level.grid;
+  
+  // Materials with generated noise textures
+  const wallMat = new THREE.MeshLambertMaterial({ map: generateNoiseTexture(0x222233, 0x11111a) });
+  const floorMat = new THREE.MeshLambertMaterial({ map: generateNoiseTexture(0x11111a, 0x050508) });
+  const triggerMat = new THREE.MeshBasicMaterial({ color: 0xff4444, wireframe: true });
+
+  const geoWall = new THREE.BoxGeometry(UNIT_SIZE, UNIT_SIZE*2, UNIT_SIZE);
+  const geoFloor = new THREE.PlaneGeometry(UNIT_SIZE, UNIT_SIZE);
+  geoFloor.rotateX(-Math.PI / 2);
+
+  for(let z=0; z<grid.length; z++) {
+    for(let x=0; x<grid[z].length; x++) {
+      const type = grid[z][x];
+      const posX = x * UNIT_SIZE;
+      const posZ = z * UNIT_SIZE;
+      
+      // Floor everywhere
+      const floor = new THREE.Mesh(geoFloor, floorMat);
+      floor.position.set(posX, 0, posZ);
+      scene3d.add(floor);
+
+      if (type === 1) {
+        // Wall
+        const wall = new THREE.Mesh(geoWall, wallMat);
+        wall.position.set(posX, UNIT_SIZE, posZ);
+        scene3d.add(wall);
+        
+        // Simple bounding box for collision
+        wall.boundingBox = new THREE.Box3().setFromObject(wall);
+        walls.push(wall);
+      } else if (type === 2) {
+        // Trigger (Door / Entrance)
+        const doorMat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Solid bright red
+        const trigger = new THREE.Mesh(new THREE.BoxGeometry(UNIT_SIZE * 1.5, UNIT_SIZE * 2, UNIT_SIZE * 1.5), doorMat);
+        trigger.position.set(posX, UNIT_SIZE, posZ);
+        scene3d.add(trigger);
+        
+        const doorLight = new THREE.PointLight(0xff0000, 5, 40); // Stronger light to wash the surrounding area in red
+        doorLight.position.set(posX, UNIT_SIZE, posZ);
+        scene3d.add(doorLight);
+        
+        trigger.boundingBox = new THREE.Box3().setFromObject(trigger);
+        triggers.push(trigger);
+      } else if (type === 3) {
+        // Tree (Trunk + Leaves)
+        const trunkMat = new THREE.MeshLambertMaterial({ map: generateNoiseTexture(0x3d2817, 0x1e1208) });
+        const leafMat = new THREE.MeshLambertMaterial({ map: generateNoiseTexture(0x1a4314, 0x0d220a) });
+        const treeGroup = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 2), trunkMat);
+        trunk.position.y = 1;
+        treeGroup.add(trunk);
+        const leaves = new THREE.Mesh(new THREE.ConeGeometry(2, 3, 5), leafMat);
+        leaves.position.y = 3;
+        treeGroup.add(leaves);
+        
+        treeGroup.position.set(posX, 0, posZ);
+        treeGroup.rotation.y = Math.random() * Math.PI;
+        const scale = 0.8 + Math.random() * 0.4;
+        treeGroup.scale.set(scale, scale, scale);
+        
+        scene3d.add(treeGroup);
+        const box = new THREE.Box3();
+        box.setFromCenterAndSize(new THREE.Vector3(posX, 1.5, posZ), new THREE.Vector3(2, 5, 2));
+        treeGroup.boundingBox = box;
+        walls.push(treeGroup);
+      } else if (type === 4) {
+        // Exterior Building Wall (Taller and more imposing)
+        const extWallMat = new THREE.MeshLambertMaterial({ map: generateNoiseTexture(0x2a2a30, 0x151518) });
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(UNIT_SIZE, UNIT_SIZE * 3, UNIT_SIZE), extWallMat);
+        wall.position.set(posX, UNIT_SIZE * 1.5, posZ);
+        scene3d.add(wall);
+        wall.boundingBox = new THREE.Box3().setFromObject(wall);
+        walls.push(wall);
+      }
+    }
+  }
+
+  // Set Player Start
+  camera.position.set(level.playerStart.x * UNIT_SIZE, PLAYER_HEIGHT, level.playerStart.y * UNIT_SIZE);
+  controls.getObject().position.copy(camera.position);
+  controls.getObject().rotation.y = Math.PI; // Face +Z (towards the building)
+}
+
+function start3DScene(level) {
+  if(!renderer) init3D();
+  
+  currentLevelData = level;
+  is3DActive = true;
+  document.getElementById('game-2d').style.display = 'none';
+  document.getElementById('game-3d-container').style.display = 'block';
+  document.getElementById('objective-ui').textContent = level.objective;
+  
+  buildLevel(level);
+}
+
+function end3DScene() {
+  is3DActive = false;
+  controls.unlock();
+  document.getElementById('game-3d-container').style.display = 'none';
+  
+  // Proceed to next 2D scene
+  state.depth++;
+  showScene(currentLevelData.next);
+}
+
+function checkCollision(pos) {
+  const playerBox = new THREE.Box3();
+  const playerSize = 1.0;
+  playerBox.min.set(pos.x - playerSize, 0, pos.z - playerSize);
+  playerBox.max.set(pos.x + playerSize, PLAYER_HEIGHT*2, pos.z + playerSize);
+
+  for (let i = 0; i < walls.length; i++) {
+    if (playerBox.intersectsBox(walls[i].boundingBox)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function animate3D() {
+  requestAnimationFrame(animate3D);
+
+  if (is3DActive && controls.isLocked) {
+    const time = performance.now();
+    const delta = (time - prevTime) / 1000;
+
+    velocity.x -= velocity.x * 10.0 * delta;
+    velocity.z -= velocity.z * 10.0 * delta;
+
+    direction.z = Number(moveForward) - Number(moveBackward);
+    direction.x = Number(moveLeft) - Number(moveRight);
+    direction.normalize();
+
+    if (moveForward || moveBackward) velocity.z -= direction.z * 40.0 * delta;
+    if (moveLeft || moveRight) velocity.x -= direction.x * 40.0 * delta;
+
+    const controlObj = controls.getObject();
+    const oldPos = controlObj.position.clone();
+
+    // Move X
+    controlObj.translateX(velocity.x * delta);
+    if (checkCollision(controlObj.position)) {
+      controlObj.position.x = oldPos.x;
+      velocity.x = 0;
+    }
+
+    // Move Z
+    controlObj.translateZ(velocity.z * delta);
+    if (checkCollision(controlObj.position)) {
+      controlObj.position.z = oldPos.z;
+      velocity.z = 0;
+    }
+    
+    // Head Bobbing effect
+    if(moveForward || moveBackward || moveLeft || moveRight) {
+      camera.position.y = PLAYER_HEIGHT + Math.sin(time * 0.01) * 0.15;
+    } else {
+      camera.position.y = PLAYER_HEIGHT;
+    }
+
+    // Check Trigger Collision
+    const playerBox = new THREE.Box3();
+    playerBox.setFromCenterAndSize(controlObj.position, new THREE.Vector3(1, 1, 1));
+    for (let i = 0; i < triggers.length; i++) {
+      if (playerBox.intersectsBox(triggers[i].boundingBox)) {
+        end3DScene(); // Reached objective
+        break;
+      }
+    }
+
+    prevTime = time;
+  } else {
+    prevTime = performance.now();
+  }
+
+  if (is3DActive) {
+    // Make triggers pulse
+    triggers.forEach(t => {
+      t.rotation.y += 0.02;
+      t.rotation.x += 0.01;
+    });
+    renderer.render(scene3d, camera);
+  }
+}
+
+// Start Game
+showScene(0);
+
+</script>
+</body>
+</html>
